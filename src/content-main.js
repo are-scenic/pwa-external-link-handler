@@ -1,35 +1,31 @@
 /*
- * MAIN-world interceptor content script for PWA External Link Handler.
+ * MAIN-world interceptor for PWA External Link Handler.
  *
- * Runs in the page's own JS realm so it can patch `window.open` and
- * `window.navigation.navigate`. Detects PWA display modes; if the window is a
- * PWA, installs interceptors that capture external-origin HTTP(S) navigations
- * and forwards them to the ISOLATED-world bridge via `window.postMessage`.
+ * Runs in the page's own JS realm so it can patch window.open and
+ * window.navigation.navigate. If the window is an installed-PWA window, this
+ * script captures external-origin HTTP(S) navigations and forwards them to
+ * the ISOLATED-world bridge via window.postMessage.
  *
- * Security posture: this script is fail-OPEN by design. The page shares the
- * realm and could replace our wrappers at will; the non-writable sentinel is
- * idempotency hardening only, not a trust boundary. See design §3.1, §7.4.
+ * This script is fail-open by design: the page shares the realm and can
+ * replace our wrappers at will. The non-writable sentinel is idempotency
+ * hardening, not a trust boundary.
  */
 
 (() => {
     'use strict';
 
-    // Forward-compatible set per design §3.1.3 / research Q1.
     // `picture-in-picture` is intentionally excluded — it indicates transient
     // Document-PiP state, not an installed-PWA window.
     const PWA_MODES = ['standalone', 'minimal-ui', 'fullscreen', 'window-controls-overlay', 'tabbed'];
     const SENTINEL = '__pwa_elh_main_installed__';
     const LOG_PREFIX = '[pwa-elh:main]';
 
-    // Only run in the top frame. Sub-frames inherit the top frame's display
-    // mode, but a PWA may host cross-origin iframes whose realms we don't want
-    // to instrument. See design §3.1.3.
+    // Sub-frames inherit the top frame's display mode, but a PWA may host
+    // cross-origin iframes whose realms we don't want to instrument.
     if (window.top !== window) return;
 
     if (!isInPwa()) return;
 
-    // Idempotency hardening — prevents double-installation if the script is
-    // somehow loaded twice. Not a security boundary.
     if (window[SENTINEL]) return;
     try {
         Object.defineProperty(window, SENTINEL, {
@@ -48,10 +44,6 @@
     installClickListeners();
     announcePwaActive();
 
-    /**
-     * Returns true when the current window matches any installed-PWA display
-     * mode. Runs once at script start; we do not subscribe to changes (§8.D7).
-     */
     function isInPwa() {
         try {
             return PWA_MODES.some(m => window.matchMedia(`(display-mode: ${m})`).matches);
@@ -61,10 +53,10 @@
     }
 
     /**
-     * Wraps `window.open` to redirect external HTTP(S) opens through the
-     * bridge. Returns `null` (spec-conformant popup-blocked shape) to the
-     * caller in that case. Keeps a bound reference to the original to survive
-     * page-level reassignment.
+     * Wraps window.open to redirect external HTTP(S) opens through the
+     * bridge. Returns null (the spec-conformant popup-blocked shape) when the
+     * call is intercepted. The bound reference to the original survives
+     * page-level reassignment of window.open.
      */
     function installWindowOpenProxy() {
         try {
@@ -89,9 +81,8 @@
     }
 
     /**
-     * Wraps the Navigation API's `navigate` for modern PWAs that route
-     * programmatic navigations through it. Feature-gated; no-op on older
-     * Chromium.
+     * Wraps the Navigation API's navigate() for PWAs that route programmatic
+     * navigations through it. No-op on Chromium versions without the API.
      */
     function installNavigationApiProxy() {
         try {
@@ -104,7 +95,8 @@
                             kind: 'open-external',
                             payload: { url: absolutize(url), source: 'navigation.navigate' }
                         });
-                        // Return a no-op shape so awaiting callers don't hang.
+                        // Return a resolved no-op shape so awaiting callers
+                        // don't hang.
                         return {
                             committed: Promise.resolve(),
                             finished: Promise.resolve()
@@ -121,9 +113,9 @@
     }
 
     /**
-     * Capture-phase click + auxclick listeners. Capture phase ensures we run
-     * before the page's bubble-phase handlers. `auxclick` covers middle-click
-     * on anchors per UI Events spec.
+     * Capture-phase click and auxclick listeners. Capture ensures we run
+     * before the page's own bubble-phase handlers. auxclick is needed for
+     * middle-click on anchors per the UI Events spec.
      */
     function installClickListeners() {
         document.addEventListener('click', onAnchorClick, true);
@@ -133,22 +125,21 @@
     function onAnchorClick(ev) {
         try {
             if (ev.defaultPrevented) return;
-            // Left and middle clicks only — right-click context menu is the
+            // Left and middle clicks only; right-click context menu is the
             // user's own.
             if (ev.button !== 0 && ev.button !== 1) return;
             const anchor = ev.target?.closest?.('a[href]');
             if (!anchor) return;
             const url = anchor.href; // already absolutized by the DOM
-            // Note: `<a href="">` and `<a href="#frag">` absolutise to a
-            // same-origin URL via document.baseURI and are correctly rejected
-            // by isExternalHttp() as same-origin — they fall through to the
-            // page's own navigation.
+            // <a href=""> and <a href="#frag"> resolve to a same-origin URL
+            // via document.baseURI and are correctly rejected as same-origin
+            // — they fall through to the page's own navigation.
             if (!isExternalHttp(url)) return;
             ev.preventDefault();
             ev.stopPropagation();
-            // We intentionally do NOT stopImmediatePropagation — other
-            // extensions' capture-phase listeners (e.g., analytics) should
-            // still observe the click.
+            // Deliberately NOT stopImmediatePropagation — other extensions'
+            // capture-phase listeners (e.g., analytics) should still observe
+            // the click.
             postIntercept({
                 kind: 'open-external',
                 payload: { url, source: 'anchor-click', modifiers: pickModifiers(ev) }
@@ -169,9 +160,8 @@
     }
 
     /**
-     * Returns true iff the given URL parses as http/https AND has an origin
-     * distinct from the current document's origin. Resolves relative URLs
-     * against `document.baseURI` so anchor-relative hrefs are handled.
+     * True iff the URL parses as http/https AND its origin differs from the
+     * current document's. Relative URLs are resolved against document.baseURI.
      */
     function isExternalHttp(url) {
         try {
@@ -192,9 +182,9 @@
     }
 
     /**
-     * Sends a message to the ISOLATED-world bridge. Always targets the own
-     * origin so other windows in the same realm cannot eavesdrop. Includes a
-     * sentinel so the bridge can cheaply filter unrelated messages.
+     * Posts a message to the ISOLATED-world bridge. Targets the document's
+     * own origin so other windows in the same realm cannot eavesdrop. The
+     * `__pwa_elh` sentinel lets the bridge cheaply filter unrelated traffic.
      */
     function postIntercept(body) {
         try {
@@ -207,11 +197,6 @@
         }
     }
 
-    /**
-     * One-shot signal to the bridge that this window is a PWA. The bridge
-     * forwards it to the service worker, which switches the action icon to
-     * the active state for the tab.
-     */
     function announcePwaActive() {
         postIntercept({ kind: 'pwa-active' });
     }

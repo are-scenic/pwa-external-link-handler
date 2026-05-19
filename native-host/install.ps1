@@ -15,13 +15,13 @@
     * Chrome   -> HKCU\Software\Google\Chrome\NativeMessagingHosts (Chrome ID)
     * Edge     -> HKCU\Software\Microsoft\Edge\NativeMessagingHosts (Edge ID)
     * Chromium -> HKCU\Software\Chromium\NativeMessagingHosts (Chrome ID)
-    * Brave/Vivaldi/Opera: NOT written separately. Per research Q4, these
-      browsers on Windows resolve via Chrome's registry keys, so the
-      Chrome registration above covers them.
+    * Brave/Vivaldi/Opera: not written separately. On Windows these
+      browsers resolve via Chrome's registry keys, so the Chrome
+      registration above covers them.
 
-    On Windows, Edge falls back to Chrome's registry locations if no
-    Edge-scoped entry is present. To prevent Edge from picking up the
-    Chrome manifest (with the wrong allowed_origins ID), this installer
+    Edge falls back to Chrome's registry locations if no Edge-scoped
+    entry is present. To prevent Edge from picking up the Chrome
+    manifest (with the wrong allowed_origins ID), this installer
     ALWAYS writes an Edge-scoped registry entry pointing at the Edge-
     specific manifest.
 
@@ -82,8 +82,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# ---------- constants -----------------------------------------------------
-
 $HostName     = 'com.aaharonov.pwa_elh'
 $HostDesc     = 'PWA External Link Handler - opens external links in the OS default browser.'
 $ScriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -97,7 +95,7 @@ $HostDst      = Join-Path $InstallPath 'host.py'
 if (-not $ChromeWebStoreId) { $ChromeWebStoreId = 'REPLACE_WITH_CHROME_WEB_STORE_ID' }
 if (-not $EdgeAddonsId)     { $EdgeAddonsId     = 'REPLACE_WITH_EDGE_ADDONS_ID' }
 
-# Validate extension IDs (Chrome Web Store charset is [a-p]{32}).
+# Chrome Web Store extension IDs use the [a-p]{32} charset.
 $ExtIdPattern = '^([a-p]{32}|REPLACE_WITH_[A-Z_]+)$'
 if ($ChromeWebStoreId -notmatch $ExtIdPattern) {
     throw "Invalid ChromeWebStoreId (expected 32 lowercase a-p chars or REPLACE_WITH_*): $ChromeWebStoreId"
@@ -108,28 +106,21 @@ if ($EdgeAddonsId -notmatch $ExtIdPattern) {
 
 $Hive = if ($SystemWide) { 'HKLM:' } else { 'HKCU:' }
 
-# Per design §3.4.10 and research Q4:
-#   Chrome   -> HKCU\Software\Google\Chrome\NativeMessagingHosts
-#   Edge     -> HKCU\Software\Microsoft\Edge\NativeMessagingHosts (scoped
-#               explicitly to avoid Edge's fallback to Chrome's keys
-#               loading the wrong allowed_origins ID).
-#   Chromium -> HKCU\Software\Chromium\NativeMessagingHosts
-# Brave/Vivaldi/Opera on Windows resolve via Chrome's keys per Q4 line 126
-# ("Brave's own registry path under SOFTWARE\BraveSoftware\... is not
-# officially documented"); the Chrome registration above covers them.
+# Edge is registered explicitly to avoid its fallback into Chrome's
+# registry keys loading the wrong allowed_origins ID. Brave, Vivaldi and
+# Opera on Windows resolve via Chrome's keys (their own registry paths
+# are not officially documented), so the Chrome entry covers them.
 $BrowserMap = @(
     [pscustomobject]@{ Key = "$Hive\Software\Google\Chrome\NativeMessagingHosts\$HostName";  Manifest = 'chrome.json';   Browser = 'chrome'   }
     [pscustomobject]@{ Key = "$Hive\Software\Microsoft\Edge\NativeMessagingHosts\$HostName"; Manifest = 'edge.json';     Browser = 'edge'     }
     [pscustomobject]@{ Key = "$Hive\Software\Chromium\NativeMessagingHosts\$HostName";       Manifest = 'chromium.json'; Browser = 'chromium' }
 )
 
-# ---------- helpers -------------------------------------------------------
-
 function Write-Log { param([string]$Message) Write-Host "install: $Message" }
 
-# Write a UTF-8 file without BOM. Set-Content -Encoding UTF8 writes BOM on
-# Windows PowerShell 5.1 but BOM-less on PS Core 7; Chromium parses both
-# but our re-render byte-identity check needs determinism.
+# Set-Content -Encoding UTF8 writes a BOM on Windows PowerShell 5.1 but
+# is BOM-less on PS Core 7. Chromium parses both, but we need determinism
+# for the byte-identity check across runs.
 function Write-Utf8NoBom {
     param(
         [Parameter(Mandatory)] [string]$Path,
@@ -152,7 +143,7 @@ function New-ManifestJson {
         type            = 'stdio'
         allowed_origins = @($origin)
     }
-    # ConvertTo-Json with -Compress avoids version-dependent indentation.
+    # -Compress avoids version-dependent indentation in ConvertTo-Json output.
     return ($manifest | ConvertTo-Json -Depth 4 -Compress)
 }
 
@@ -196,8 +187,8 @@ function Uninstall-Manifests {
         }
     }
     if (Test-Path $InstallPath) {
-        # Remove the host launcher and rendered manifests; leave user data
-        # (config / logs / sentinel) intact unless -Purge is set.
+        # Remove the host launcher and rendered manifests; preserve user
+        # data (config, logs, sentinel) unless -Purge is set.
         Remove-Item -Path (Join-Path $InstallPath 'host.py')      -Force -ErrorAction SilentlyContinue
         Remove-Item -Path (Join-Path $InstallPath 'chrome.json')  -Force -ErrorAction SilentlyContinue
         Remove-Item -Path (Join-Path $InstallPath 'edge.json')    -Force -ErrorAction SilentlyContinue
@@ -212,8 +203,6 @@ function Uninstall-Manifests {
         }
     }
 }
-
-# ---------- main ----------------------------------------------------------
 
 if ($Uninstall) {
     Uninstall-Manifests

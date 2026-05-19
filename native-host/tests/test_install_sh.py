@@ -1,15 +1,4 @@
-"""Regression tests for the Linux/macOS installer (install.sh).
-
-Verifies:
-
-* The rendered manifest is valid JSON.
-* The rendered manifest matches the expected schema (name, description,
-  path, type, allowed_origins with the correct extension ID).
-* Re-running the installer produces byte-identical output (idempotence).
-* The installer refuses unsafe extension IDs and install paths.
-
-These tests are skipped on Windows because they exercise a bash script.
-"""
+"""Regression tests for the Linux/macOS installer (install.sh)."""
 
 from __future__ import annotations
 
@@ -119,7 +108,7 @@ class TestInstallerRendering:
     def test_brave_manifest_has_chrome_id(
         self, sandbox: tuple[Path, Path]
     ) -> None:
-        """Brave reuses Chrome Web Store distribution -> Chrome ID."""
+        """Brave reuses Chrome Web Store distribution, so it gets the Chrome ID."""
         home, prefix = sandbox
         result = _run_install(prefix=prefix, home=home)
         assert result.returncode == 0
@@ -138,7 +127,7 @@ class TestInstallerRendering:
     def test_rerun_is_byte_identical(
         self, sandbox: tuple[Path, Path]
     ) -> None:
-        """Idempotence: rendering the manifest twice produces the same bytes."""
+        """Rendering the manifest twice produces the same bytes."""
         home, prefix = sandbox
         assert _run_install(prefix=prefix, home=home).returncode == 0
         manifest = (
@@ -172,7 +161,8 @@ class TestInstallerInputValidation:
     ) -> None:
         home = tmp_path / "home"
         home.mkdir()
-        # A path with a double-quote is rejected as unsafe for the heredoc.
+        # A path containing a double-quote is rejected by the safe-charset
+        # check used to keep heredoc-based manifest rendering safe.
         evil_prefix = tmp_path / 'evil"path'
         result = _run_install(prefix=evil_prefix, home=home)
         assert result.returncode != 0
@@ -214,7 +204,6 @@ class TestSnapChromiumDetection:
     def test_snap_chromium_path_added_when_snap_dir_exists(
         self, sandbox: tuple[Path, Path]
     ) -> None:
-        """Linux-only: Snap-Chromium path is added when ~/snap/chromium exists."""
         if sys.platform != "linux":
             pytest.skip("Snap-Chromium is Linux-only")
         home, prefix = sandbox
@@ -240,15 +229,14 @@ class TestSnapChromiumDetection:
         home, prefix = sandbox
         result = _run_install(prefix=prefix, home=home)
         assert result.returncode == 0
-        # The Snap directory should not have been created as an orphan.
+        # The Snap directory must not have been created as an orphan.
         assert not (home / "snap").exists()
 
     def test_snap_chromium_orphan_manifest_cleaned_on_uninstall(
         self, sandbox: tuple[Path, Path]
     ) -> None:
         """If the user removes Snap-Chromium after install, the orphan
-        manifest must still be cleaned up by `--uninstall`. Regression
-        test for the cycle-2 reviewer's Minor #1."""
+        manifest must still be cleaned up by `--uninstall`."""
         if sys.platform != "linux":
             pytest.skip("Snap-Chromium is Linux-only")
         home, prefix = sandbox
@@ -264,24 +252,15 @@ class TestSnapChromiumDetection:
             / "com.aaharonov.pwa_elh.json"
         )
         assert snap_manifest.is_file()
-        # Simulate user removing the Snap-Chromium app, leaving only the
-        # NativeMessagingHosts dir + our manifest behind.
-        import shutil
-        # Remove everything in ~/snap/chromium EXCEPT the
-        # common/chromium/NativeMessagingHosts tree.
-        # Easiest: rebuild the tree with only the NMH dir + manifest.
-        nmh_dir = snap_manifest.parent
-        rescued = nmh_dir.parent.parent
-        keep = nmh_dir.parent
+        # Simulate the user removing the Snap-Chromium app, leaving only
+        # the NativeMessagingHosts dir and our manifest behind.
+        keep = snap_manifest.parent.parent
         for child in list((home / "snap" / "chromium").iterdir()):
             if child != keep.parent:
                 if child.is_dir():
                     shutil.rmtree(child)
                 else:
                     child.unlink()
-        # Now `~/snap/chromium/` only contains `common/chromium/NativeMessagingHosts/`.
-        # The install pass would not emit the row (snap app dir is empty of
-        # the app itself) but the uninstall pass MUST still clean it.
         result = _run_install(prefix=prefix, home=home, uninstall=True)
         assert result.returncode == 0
         assert not snap_manifest.exists()
@@ -291,14 +270,13 @@ class TestTildeExpansion:
     def test_tilde_in_prefix_is_expanded(
         self, tmp_path: Path
     ) -> None:
-        """A literal ~/ at the start of PWA_ELH_PREFIX is expanded to
-        $HOME rather than failing the safe-charset check. Regression
-        test for the cycle-2 reviewer's Minor #2."""
+        """A literal leading ~/ in PWA_ELH_PREFIX is expanded to $HOME
+        instead of failing the safe-charset check."""
         home = tmp_path / "home"
         home.mkdir()
-        # Use a quoted tilde so bash doesn't pre-expand it.
         env = os.environ.copy()
         env["HOME"] = str(home)
+        # Quoted tilde so bash does not pre-expand it.
         env["PWA_ELH_PREFIX"] = "~/install-target"
         env["CHROME_WEB_STORE_ID"] = "abcdefghijklmnopabcdefghijklmnop"
         env["EDGE_ADDONS_ID"] = "ponmlkjihgfedcbaponmlkjihgfedcba"
@@ -310,7 +288,6 @@ class TestTildeExpansion:
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        # The host should be installed under $HOME/install-target/, not
-        # ~/install-target/ literally.
+        # Should resolve to $HOME/install-target, not a literal ~ dir.
         assert (home / "install-target" / "host.py").is_file()
         assert not (home / "~").exists()

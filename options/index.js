@@ -1,9 +1,9 @@
 /*
  * Options page controller for PWA External Link Handler.
  *
- * Wires the three controls (Save / Clear / Re-check) to chrome.storage.local
- * and a direct probe against the native host. No inline event handlers — CSP
- * forbids them. No external dependencies.
+ * Wires the Save / Clear / Re-check controls to chrome.storage.local and a
+ * direct probe of the native host. No inline event handlers (the
+ * extension-pages CSP forbids them) and no external dependencies.
  */
 
 'use strict';
@@ -39,9 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     probeHostStatus();
 });
 
-/**
- * Loads the persisted browser-binary override, if any, into the input field.
- */
 async function loadStoredValue() {
     try {
         const got = await chrome.storage.local.get([STORAGE_KEY_BROWSER]);
@@ -82,23 +79,22 @@ function setSaveStatus(text, kind) {
     saveStatusEl.textContent = text;
     saveStatusEl.classList.remove('ok', 'error', 'pending');
     if (kind) saveStatusEl.classList.add(kind);
-    if (text) {
-        // Auto-clear non-error messages after a couple of seconds.
-        if (kind !== 'error') {
-            setTimeout(() => {
-                if (saveStatusEl?.textContent === text) {
-                    saveStatusEl.textContent = '';
-                    saveStatusEl.classList.remove('ok', 'error', 'pending');
-                }
-            }, STATUS_CLEAR_MS);
-        }
+    // Auto-clear non-error messages after a couple of seconds; errors
+    // persist so the user has time to read them.
+    if (text && kind !== 'error') {
+        setTimeout(() => {
+            if (saveStatusEl?.textContent === text) {
+                saveStatusEl.textContent = '';
+                saveStatusEl.classList.remove('ok', 'error', 'pending');
+            }
+        }, STATUS_CLEAR_MS);
     }
 }
 
 /**
- * Probes the native host with the documented probe-channel envelope (design
- * §3.5.4). The host treats `{ url: 'about:blank', probe: true }` as a no-spawn
- * health check and replies `{ ok: true, probe: true }`.
+ * Probes the native host with `{ url: 'about:blank', probe: true }`. The
+ * host treats this as a no-spawn health check and replies
+ * `{ ok: true, probe: true }`.
  */
 async function probeHostStatus() {
     setHostStatus('Checking…', 'pending');
@@ -108,8 +104,8 @@ async function probeHostStatus() {
         if (reply && reply.ok === true) {
             setHostStatus('Native host installed and reachable.', 'ok');
             clearHostErrorDetail();
-            // Successful probe clears the persisted last-error record so it
-            // doesn't linger after the underlying issue is fixed.
+            // A successful probe clears the persisted last-error record so
+            // it doesn't linger after the underlying issue is fixed.
             try { await chrome.storage.local.remove([STORAGE_KEY_LAST_ERROR]); } catch (_) {}
         } else {
             const errText = (reply && typeof reply.error === 'string') ? reply.error : 'host returned not-ok';
@@ -130,9 +126,9 @@ function setHostStatus(text, kind) {
 }
 
 /**
- * Surfaces the most recent native-host error the service worker recorded.
- * The SW writes diagnostic detail to chrome.storage.local because the action
- * tooltip is kept to the fixed §3.3.6 string and cannot carry it.
+ * Surfaces the most recent native-host error recorded by the service
+ * worker. The SW writes diagnostic detail to chrome.storage.local because
+ * the action tooltip is a fixed user-facing string and cannot carry it.
  */
 async function renderLastNativeHostError() {
     try {

@@ -1,19 +1,4 @@
-"""Unit tests for the PWA External Link Handler native host.
-
-These tests exercise:
-
-* The native-messaging wire protocol (length-prefixed JSON over stdio).
-* URL and browser_override validation (including absolute-path requirement).
-* Probe contract (design §3.5.4): probe is taken iff probe=True AND
-  url=="about:blank", and returns {ok:true, probe:true}.
-* OS dispatch — both default-launcher and explicit override paths, on
-  each supported platform (Linux/Darwin/Windows), with no real spawns.
-* The request-handler glue (probe ordering vs. URL validation,
-  validation failures, browser override).
-* The debug-logging gating (env var + sentinel file co-located in user
-  data dir) and structural URL exclusion via the field whitelist.
-* The ``main()`` entry point — end-to-end, with stdin/stdout simulated.
-"""
+"""Unit tests for the PWA External Link Handler native host."""
 
 from __future__ import annotations
 
@@ -33,27 +18,17 @@ import pytest
 import host
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _encode(payload: Any) -> bytes:
-    """Serialise ``payload`` as a Chrome-native-messaging frame."""
+    """Serialise ``payload`` as a Chrome native-messaging frame."""
     body = json.dumps(payload).encode("utf-8")
     return struct.pack("<I", len(body)) + body
 
 
 def _decode(frame: bytes) -> Any:
-    """Decode a single Chrome-native-messaging frame."""
+    """Decode a single Chrome native-messaging frame."""
     (length,) = struct.unpack("<I", frame[:4])
     body = frame[4 : 4 + length]
     return json.loads(body.decode("utf-8"))
-
-
-# ---------------------------------------------------------------------------
-# Wire protocol
-# ---------------------------------------------------------------------------
 
 
 class TestReadMessage:
@@ -77,7 +52,7 @@ class TestReadMessage:
 
     def test_read_message_truncated_body_returns_none(self) -> None:
         body = b'{"url":"https://example.com"}'
-        # Lie about the length: claim more bytes than provided.
+        # Claim more bytes than provided.
         stream = io.BytesIO(struct.pack("<I", len(body) + 50) + body)
         assert host.read_message(stream) is None
 
@@ -120,11 +95,6 @@ class TestWriteMessage:
         }
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
 class TestValidateUrl:
     @pytest.mark.parametrize(
         "url",
@@ -149,7 +119,7 @@ class TestValidateUrl:
             "data:text/plain,hi",
             "ws://example.com",
             "chrome://settings",
-            "about:blank",  # the probe URL is NOT a valid open target
+            "about:blank",  # the probe URL is not a valid open target
         ],
     )
     def test_validate_url_rejects_other_schemes(self, url: str) -> None:
@@ -193,12 +163,11 @@ class TestValidateBrowserOverride:
         assert path is None and err is not None and "string" in err
 
     def test_relative_path_rejected(self, tmp_path: Path) -> None:
-        # Even an existing, executable file is rejected if the path is
-        # relative — the host's CWD is not a trust boundary.
+        # An executable file at a relative path is still rejected — the
+        # host's CWD is not a trust boundary.
         binary = tmp_path / "bin"
         binary.write_text("#!/bin/sh\n")
         os.chmod(binary, 0o755)
-        # Use a clearly relative path (no leading slash).
         path, err = host.validate_browser_override("bin")
         assert path is None
         assert err == "browser_override must be an absolute path"
@@ -229,11 +198,6 @@ class TestValidateBrowserOverride:
         path, err = host.validate_browser_override(str(bin_path))
         assert path == str(bin_path)
         assert err is None
-
-
-# ---------------------------------------------------------------------------
-# OS dispatch
-# ---------------------------------------------------------------------------
 
 
 class TestOpenUrlPosix:
@@ -309,7 +273,7 @@ class TestOpenUrlOverride:
 
     def test_override_on_windows_uses_popen_not_startfile(self) -> None:
         # Explicit override should bypass os.startfile and use Popen so the
-        # user's chosen binary is invoked directly (avoiding shell parsing).
+        # user's chosen binary is invoked directly without shell parsing.
         popen = MagicMock()
         startfile = MagicMock()
         result = host.open_url(
@@ -384,11 +348,6 @@ class TestOpenUrlWindows:
         assert "os.startfile" in result["error"]
 
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-
 class TestLogging:
     def test_debug_disabled_by_default(
         self, monkeypatch: pytest.MonkeyPatch
@@ -401,11 +360,10 @@ class TestLogging:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        # Env var alone is not enough.
         monkeypatch.setenv(host.DEBUG_ENV_VAR, "1")
         monkeypatch.setattr(host, "_user_data_dir", lambda: tmp_path)
+        # Env var alone is not enough.
         assert host._debug_enabled() is False
-        # Now create the sentinel.
         (tmp_path / ".debug").write_text("")
         assert host._debug_enabled() is True
 
@@ -421,7 +379,6 @@ class TestLogging:
 
     def test_configure_logging_disabled_is_silent(self) -> None:
         logger = host._configure_logging(False)
-        # Effectively silent: level above CRITICAL.
         assert logger.level > logging.CRITICAL
 
     def test_configure_logging_enabled_writes_to_file(
@@ -432,7 +389,6 @@ class TestLogging:
         monkeypatch.setattr(host, "_user_data_dir", lambda: tmp_path)
         logger = host._configure_logging(True)
         host._log_event(logger, "test_event", code=1)
-        # Flush and close handlers so we can read the file.
         for h in list(logger.handlers):
             h.close()
             logger.removeHandler(h)
@@ -447,11 +403,10 @@ class TestLogging:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """Regression: passing url= to _log_event must NOT emit URL content.
+        """Passing url= to _log_event must not emit URL content.
 
-        This is the structural-defence test for the privacy-critical
-        logging contract. Even if a future caller passes a URL by
-        mistake, the field whitelist drops it before serialisation.
+        The field whitelist drops it before serialisation even if a future
+        caller passes a URL by mistake.
         """
         monkeypatch.setattr(host, "_user_data_dir", lambda: tmp_path)
         logger = host._configure_logging(True)
@@ -468,7 +423,6 @@ class TestLogging:
         assert "https://" not in text
         assert "secret.example.com" not in text
         assert "token" not in text
-        # But the allowlisted field IS emitted.
         assert "FileNotFoundError" in text
 
     def test_log_event_drops_none_values(
@@ -487,14 +441,8 @@ class TestLogging:
         assert '"ok": true' in text or '"ok":true' in text
 
 
-# ---------------------------------------------------------------------------
-# Probe contract (design §3.5.4)
-# ---------------------------------------------------------------------------
-
-
 class TestProbeContract:
     def test_probe_about_blank_returns_ok_probe_true(self) -> None:
-        """Design §3.5.4: probe with about:blank returns {ok:true,probe:true}."""
         popen = MagicMock()
         response = host.handle_request(
             {"url": "about:blank", "browser_override": None, "probe": True},
@@ -505,7 +453,7 @@ class TestProbeContract:
         popen.assert_not_called()
 
     def test_probe_with_other_url_rejected(self) -> None:
-        """Design §3.5.4: probe path is not a covert no-spawn channel."""
+        """Probe path must not double as a covert no-spawn channel."""
         popen = MagicMock()
         response = host.handle_request(
             {"url": "https://example.com", "probe": True},
@@ -520,24 +468,17 @@ class TestProbeContract:
         assert response == {"ok": False, "error": "invalid probe"}
 
     def test_probe_false_with_about_blank_rejected_as_invalid_url(self) -> None:
-        """about:blank with probe=False (or omitted) is a normal request
-        and must be rejected by URL validation (non-http scheme)."""
+        """about:blank without probe=True is rejected by URL validation."""
         response = host.handle_request({"url": "about:blank"})
         assert response == {"ok": False, "error": "invalid url"}
 
     def test_probe_field_must_be_strictly_true(self) -> None:
-        # probe: truthy-but-not-true (e.g. 1, "yes") must NOT trigger probe.
+        # Truthy-but-not-True values must not trigger the probe path.
         for value in [1, "true", "yes", [1]]:
             response = host.handle_request(
                 {"url": "about:blank", "probe": value}
             )
-            # Not probe -> URL validation rejects about:blank.
             assert response == {"ok": False, "error": "invalid url"}
-
-
-# ---------------------------------------------------------------------------
-# Request handler
-# ---------------------------------------------------------------------------
 
 
 class TestHandleRequest:
@@ -602,11 +543,6 @@ class TestHandleRequest:
         )
         assert response == {"ok": True}
         assert popen.call_args.args[0][0] == str(binary)
-
-
-# ---------------------------------------------------------------------------
-# main() entry point
-# ---------------------------------------------------------------------------
 
 
 class TestMain:

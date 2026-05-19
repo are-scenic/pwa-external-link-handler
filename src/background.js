@@ -4,23 +4,24 @@
  * Single privileged endpoint. Receives validated messages from the
  * ISOLATED-world bridge and:
  *   - routes `open-external` to the native host via sendNativeMessage,
- *   - routes `pwa-active` to per-tab icon state,
- *   - enforces a per-tab 100ms native-host throttle (10 Hz cap) — design §3.3.4,
- *   - surfaces native-host failure via badge + tooltip + first-time options page.
+ *   - updates the per-tab action icon on `pwa-active`,
+ *   - enforces a per-tab native-host throttle,
+ *   - surfaces native-host failure via badge, tooltip, and the options page.
  *
  * Holds no long-lived state; the per-tab maps are best-effort and reset on
- * worker termination. That's acceptable because they exist for rate-limiting,
- * not authorisation.
+ * worker termination. That is acceptable because they exist for rate
+ * limiting, not authorisation.
  */
 
+// Must match the host name declared in com.aaharonov.pwa_elh.json.
 const NATIVE_HOST_NAME = 'com.aaharonov.pwa_elh';
 const LOG_PREFIX = '[pwa-elh:bg]';
-const PER_TAB_THROTTLE_MS = 100;            // design §3.3.4 — 10 Hz/tab ceiling
+const PER_TAB_THROTTLE_MS = 100;
 const STORAGE_KEY_BROWSER = 'browserBinary';
 const STORAGE_KEY_HOST_NOTICED = 'hostMissingNoticedOnce';
 const STORAGE_KEY_LAST_ERROR = 'lastNativeHostError';
-// Fixed tooltip per design §3.3.6 — must not be concatenated with diagnostic
-// text. Detailed error info is surfaced via the options page instead.
+// Fixed user-facing tooltip — diagnostic detail is surfaced via the options
+// page rather than concatenated into the tooltip.
 const FAILURE_TOOLTIP = 'Native host not installed — click for help';
 
 const ICONS_INACTIVE = {
@@ -44,7 +45,7 @@ const lastDispatchByTab = new Map();
 chrome.runtime.onInstalled.addListener((details) => {
     try {
         chrome.action.setIcon({ path: ICONS_INACTIVE }, () => {
-            // Drain lastError; setIcon without tabId sets the global default.
+            // setIcon without a tabId sets the global default; drain lastError.
             void chrome.runtime.lastError;
         });
         chrome.action.setTitle({ title: 'PWA External Link Handler (inactive — not a PWA tab)' });
@@ -54,20 +55,20 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.action.onClicked.addListener(() => {
-    // The action serves as a status indicator; clicking it opens the options
-    // page for diagnostics, regardless of state. Failure-mode users land here
-    // automatically too — see notifyUserFailure.
+    // The action doubles as a status indicator; clicking it opens the options
+    // page for diagnostics. Failure-mode users also land here automatically
+    // via notifyUserFailure().
     openOptionsPage();
 });
 
 // --- Message routing -------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    // Only accept messages from this extension's own content scripts.
+    // Chrome stamps sender.id and sender.tab from the runtime, not the
+    // message — they cannot be spoofed by the sending page.
     if (sender.id !== chrome.runtime.id) return false;
-    // sender.tab presence implies the sender is a content script with a tab —
-    // options-page traffic does not carry sender.tab and is excluded from
-    // this channel.
+    // sender.tab presence implies a content-script sender; options-page
+    // traffic does not carry sender.tab and is excluded from this channel.
     if (!sender.tab) return false;
     if (!msg || typeof msg !== 'object') return false;
 
@@ -93,8 +94,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 /**
  * Validates, throttles, and dispatches the open-external request to the
- * native host. Returns `true` if the request was dispatched and the host
- * acknowledged success; `false` otherwise (including throttled).
+ * native host. Resolves to `true` when the host acknowledged success;
+ * `false` otherwise (including throttled).
  */
 async function handleOpenExternal(msg, sender) {
     const url = typeof msg.url === 'string' ? msg.url : '';
@@ -105,8 +106,8 @@ async function handleOpenExternal(msg, sender) {
 
     const tabId = sender.tab.id;
     if (isThrottled(tabId)) {
-        // Silent drop — a malicious page in a tight window.open loop is the
-        // dominant case here; we deliberately do not surface anything.
+        // Silent drop. The dominant case is a malicious or buggy page in a
+        // tight window.open loop; we deliberately surface nothing.
         return false;
     }
     markDispatched(tabId);
@@ -157,10 +158,10 @@ function isThrottled(tabId) {
 }
 
 function markDispatched(tabId) {
-    // Map.set on an existing key does NOT move the key to insertion-most-
-    // recent. Delete first, then set — that way the bounded-size GC below
-    // evicts the true LRU tab rather than the oldest-inserted tab (which is
-    // typically a long-lived tab the user is still actively using).
+    // Map.set on an existing key does NOT move it to insertion-most-recent.
+    // Delete first, then set, so the bounded-size GC below evicts the true
+    // LRU tab rather than the oldest-inserted one (typically a long-lived
+    // tab the user is still actively using).
     lastDispatchByTab.delete(tabId);
     lastDispatchByTab.set(tabId, Date.now());
     if (lastDispatchByTab.size > 256) {
@@ -172,23 +173,21 @@ function markDispatched(tabId) {
 // --- Failure surface -------------------------------------------------------
 
 /**
- * Sets a red "!" badge with diagnostic tooltip on the action; on the first
- * encounter per install also opens the options page so the user notices when
- * the PWA toolbar is hidden (design §3.3.6).
+ * Renders a red "!" badge and the fixed failure tooltip on the action. On
+ * the first failure per install, also opens the options page — the user may
+ * not notice the badge otherwise, since the PWA toolbar is typically hidden.
  */
 async function notifyUserFailure(tabId, errText) {
     try {
         await chrome.action.setBadgeText({ tabId, text: '!' });
         await chrome.action.setBadgeBackgroundColor({ tabId, color: '#c0392b' });
-        // Tooltip is the fixed design §3.3.6 string. The diagnostic detail
-        // (errText) is stashed in storage so the options page can render it.
         await chrome.action.setTitle({ tabId, title: FAILURE_TOOLTIP });
     } catch (e) {
         console.warn(LOG_PREFIX, 'setting badge/title failed', e);
     }
 
-    // Persist diagnostic detail for the options page to render in its status
-    // area. Keeps the tooltip clean while preserving diagnosability.
+    // Persist diagnostic detail for the options page to render. Keeps the
+    // tooltip short while preserving diagnosability.
     try {
         const detail = typeof errText === 'string' ? errText : String(errText ?? '');
         await chrome.storage.local.set({
@@ -198,7 +197,6 @@ async function notifyUserFailure(tabId, errText) {
         console.warn(LOG_PREFIX, 'persisting lastNativeHostError failed', e);
     }
 
-    // First-failure: open options page (design §3.3.6 step 3).
     try {
         const flags = await chrome.storage.local.get([STORAGE_KEY_HOST_NOTICED]);
         if (!flags[STORAGE_KEY_HOST_NOTICED]) {
@@ -212,9 +210,9 @@ async function notifyUserFailure(tabId, errText) {
 
 function openOptionsPage() {
     try {
-        // `openOptionsPage` honours `options_ui.open_in_tab: true` from the
-        // manifest, which we want — the options page is the diagnostics path
-        // and must be visible even when invoked from a PWA window.
+        // openOptionsPage honours `options_ui.open_in_tab: true` from the
+        // manifest, which we want — the options page is the diagnostics
+        // path and must be visible even when invoked from a PWA window.
         chrome.runtime.openOptionsPage(() => {
             void chrome.runtime.lastError;
         });
@@ -227,8 +225,8 @@ function openOptionsPage() {
 
 /**
  * Switches the action icon to the "active" variant for the given tab and
- * clears any stale error badge. Design §3.3.5: per-tab; reverts naturally on
- * tab close. We do not proactively reset on intra-tab navigation (§9.A4).
+ * clears any stale error badge. Per-tab state reverts naturally on tab
+ * close; we do not proactively reset on intra-tab navigation.
  */
 async function setActiveIcon(tabId) {
     try {

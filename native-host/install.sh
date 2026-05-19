@@ -33,8 +33,6 @@
 
 set -euo pipefail
 
-# ---------- constants ------------------------------------------------------
-
 readonly HOST_NAME="com.aaharonov.pwa_elh"
 readonly HOST_DESC="PWA External Link Handler - opens external links in the OS default browser."
 
@@ -42,16 +40,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 readonly HOST_SRC="${SCRIPT_DIR}/host.py"
 
-# Accepted Chrome Web Store extension ID pattern (lowercase a-p, 32 chars),
-# OR a placeholder beginning with "REPLACE_WITH_".
+# Chrome Web Store extension ID: lowercase a-p, exactly 32 chars. We also
+# accept a REPLACE_WITH_* placeholder so the installer can run before the
+# real IDs are minted.
 readonly EXT_ID_PATTERN='^([a-p]{32}|REPLACE_WITH_[A-Z_]+)$'
 
-# Safe-path pattern: ASCII letters, digits, space, dot, slash, underscore,
-# hyphen. No quotes, backslashes, or control characters. This keeps the
-# heredoc-based JSON rendering safe without needing a JSON-escaping pass.
+# Safe-path pattern restricted to characters that need no JSON escaping.
+# This keeps the heredoc-based manifest rendering safe without a separate
+# JSON-escaping pass.
 readonly SAFE_PATH_PATTERN='^[A-Za-z0-9 ._/-]+$'
-
-# ---------- helpers --------------------------------------------------------
 
 die() { printf 'install: %s\n' "$*" >&2; exit "${2:-2}"; }
 log() { printf 'install: %s\n' "$*"; }
@@ -68,7 +65,6 @@ detect_os() {
   esac
 }
 
-# Default install directory per OS.
 default_prefix() {
   case "$1" in
     linux) echo "${HOME}/.local/share/pwa-elh" ;;
@@ -76,8 +72,6 @@ default_prefix() {
   esac
 }
 
-# Validate an extension ID against the published Chrome Web Store charset
-# (or a recognised placeholder). Aborts on mismatch.
 validate_ext_id() {
   local name="$1" value="$2"
   if ! [[ "$value" =~ $EXT_ID_PATTERN ]]; then
@@ -85,8 +79,6 @@ validate_ext_id() {
   fi
 }
 
-# Validate that a filesystem path uses only characters that are safe to
-# substitute verbatim into the JSON manifest via a heredoc.
 validate_path_chars() {
   local name="$1" value="$2"
   if ! [[ "$value" =~ $SAFE_PATH_PATTERN ]]; then
@@ -94,12 +86,11 @@ validate_path_chars() {
   fi
 }
 
-# Print one path per line: the per-browser NativeMessagingHosts directory.
-# Format: "<browser-key>|<directory>". Conditional rows (e.g. Snap-Chromium)
-# are emitted when the relevant directory hierarchy exists. The
-# uninstall pass uses ``mode=uninstall`` so the Snap row is emitted whenever
-# the manifest dir itself exists — even if the user has since removed the
-# Snap-Chromium app — so an orphan manifest can still be cleaned up.
+# Emit "<browser-key>|<directory>" lines for every browser we target.
+# Conditional rows (e.g. Snap-Chromium) are gated on the relevant
+# directory existing. During uninstall we gate on the NativeMessagingHosts
+# dir itself so that an orphan manifest left behind after the user
+# removed the app can still be cleaned up.
 target_dirs() {
   local os="$1"
   local mode="${2:-install}"
@@ -113,9 +104,9 @@ brave|${HOME}/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts
 vivaldi|${HOME}/.config/vivaldi/NativeMessagingHosts
 opera|${HOME}/.config/com.operasoftware.Opera/NativeMessagingHosts
 EOF
-      # Snap-Chromium (Q4): for installs, gate on the Snap app dir (don't
-      # pollute non-Snap systems). For uninstalls, gate on the
-      # NativeMessagingHosts dir itself so we still clean orphan manifests
+      # For installs, gate on the Snap-Chromium app dir so we don't
+      # pollute non-Snap systems. For uninstalls, gate on the
+      # NativeMessagingHosts dir so we still clean up orphan manifests
       # left behind after the user removed Snap-Chromium.
       local snap_app_dir="${HOME}/snap/chromium"
       local snap_nmh_dir="${HOME}/snap/chromium/common/chromium/NativeMessagingHosts"
@@ -140,9 +131,9 @@ EOF
   esac
 }
 
-# Write a per-browser manifest file. Inputs MUST be pre-validated via
-# `validate_path_chars` and `validate_ext_id` — this function relies on the
-# absence of JSON-special characters in its arguments.
+# Write a per-browser manifest file. Inputs MUST be pre-validated with
+# `validate_path_chars` and `validate_ext_id` — this function relies on
+# the absence of JSON-special characters in its arguments.
 write_manifest() {
   local manifest_path="$1"
   local host_path="$2"
@@ -188,8 +179,6 @@ uninstall_for_browser() {
   fi
 }
 
-# ---------- main -----------------------------------------------------------
-
 main() {
   local mode="install" purge=0
   for arg in "$@"; do
@@ -206,10 +195,9 @@ main() {
   log "OS: ${os}"
 
   local prefix="${PWA_ELH_PREFIX:-$(default_prefix "$os")}"
-  # Expand a leading ~/ that arrived literally (e.g. user quoted the env
-  # var so bash didn't pre-expand it). Without this, the strict charset
-  # check below would reject the path with a confusing "unsafe characters"
-  # error.
+  # Expand a literal leading ~/ (e.g. user quoted the env var so bash
+  # didn't pre-expand it). Without this, the strict charset check below
+  # would reject the path with a confusing "unsafe characters" error.
   prefix="${prefix/#\~\//${HOME}/}"
   prefix="${prefix/#\~/${HOME}}"
   local host_dst="${prefix}/host.py"
@@ -247,7 +235,7 @@ main() {
         rm -rf "$prefix"
         log "purged user data: ${prefix}"
       else
-        # Preserve user data (config / logs / sentinel) unless --purge.
+        # Preserve user data (config, logs, sentinel) unless --purge.
         rmdir "$prefix" 2>/dev/null || true
       fi
     fi
