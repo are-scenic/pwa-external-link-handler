@@ -1,0 +1,98 @@
+:root {
+    color-scheme: light dark;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+body {
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+h1 {
+    font-size: 1.4rem;
+    margin: 0 0 1rem;
+}
+
+h2 {
+    font-size: 1.1rem;
+    margin: 1.5rem 0 0.5rem;
+}
+
+section {
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+label {
+    display: block;
+    margin: 0.5rem 0;
+}
+
+input[type="text"] {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    box-sizing: border-box;
+}
+
+.button-row {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+button {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+}
+
+button:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.status {
+    margin-top: 0.5rem;
+    min-height: 1.4em;
+    font-size: 0.9rem;
+    color: color-mix(in srgb, currentColor 70%, transparent);
+}
+
+.status.ok      { color: #1b7e3b; }
+.status.error   { color: #c0392b; }
+.status.pending { color: #7a6b1a; }
+
+.detail {
+    margin-top: 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: color-mix(in srgb, currentColor 65%, transparent);
+}
+
+details {
+    margin-top: 0.75rem;
+}
+
+details summary {
+    cursor: pointer;
+}
+
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+}

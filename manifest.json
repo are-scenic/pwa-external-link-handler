@@ -1,0 +1,69 @@
+{
+    "manifest_version": 3,
+    "name": "PWA External Link Handler",
+    "description": "Opens external links from PWA windows in your default browser.",
+    "version": "0.1.0",
+    "homepage_url": "https://github.com/aaharonov/pwa-external-link-handler",
+
+    "update_url": "https://aaharonov.github.io/pwa-elh/updates.xml",
+
+    "icons": {
+        "16":  "icons/inactive-16.png",
+        "32":  "icons/inactive-32.png",
+        "48":  "icons/inactive-48.png",
+        "128": "icons/inactive-128.png"
+    },
+
+    "action": {
+        "default_icon": {
+            "16":  "icons/inactive-16.png",
+            "32":  "icons/inactive-32.png",
+            "48":  "icons/inactive-48.png",
+            "128": "icons/inactive-128.png"
+        },
+        "default_title": "PWA External Link Handler (inactive — not a PWA tab)"
+    },
+
+    "background": {
+        "service_worker": "src/background.js",
+        "type": "module"
+    },
+
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["src/content-main.js"],
+            "world": "MAIN",
+            "run_at": "document_start",
+            "all_frames": true
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["src/content-bridge.js"],
+            "run_at": "document_start",
+            "all_frames": true
+        }
+    ],
+
+    "options_ui": {
+        "page": "options/index.html",
+        "open_in_tab": true
+    },
+
+    "permissions": [
+        "nativeMessaging",
+        "storage"
+    ],
+
+    "externally_connectable": {
+        "matches": [],
+        "ids": []
+    },
+
+    "minimum_chrome_version": "116",
+
+    "content_security_policy": {
+        "extension_pages": "default-src 'self'; script-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; connect-src 'self'",
+        "sandbox": "sandbox allow-scripts; script-src 'self'; child-src 'none'"
+    }
+}

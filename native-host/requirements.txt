@@ -1,0 +1,6 @@
+# PWA External Link Handler - Native Host runtime dependencies.
+#
+# The host runs on Python 3.10+ using only the standard library.
+# No third-party runtime dependencies are required.
+#
+# For development tooling (pytest, pyinstaller), see requirements-dev.txt.

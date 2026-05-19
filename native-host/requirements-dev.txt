@@ -1,0 +1,10 @@
+# PWA External Link Handler - Native Host development dependencies.
+#
+# Install with: pip install -r requirements-dev.txt
+# Or run tests directly with: uv run --with pytest pytest tests/
+
+pytest>=7.0
+# PyInstaller is needed for building the frozen host binary for macOS and
+# Windows distribution (see design §3.4.11). Not required for local
+# development against the plain-Python launcher.
+pyinstaller>=6.0

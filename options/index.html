@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>PWA External Link Handler — Options</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <h1>PWA External Link Handler</h1>
+
+    <section>
+        <h2>Browser override (optional)</h2>
+        <p>
+            Leave empty to use the operating system's default browser. Otherwise,
+            an absolute path to a browser executable that the native host will
+            launch instead.
+        </p>
+        <label>
+            Browser binary path
+            <input id="browser-binary"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="/usr/bin/firefox">
+        </label>
+        <div class="button-row">
+            <button id="save" type="button">Save</button>
+            <button id="clear" type="button">Clear</button>
+        </div>
+        <p id="save-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section>
+        <h2>Native host status</h2>
+        <p id="host-status" class="status pending" role="status" aria-live="polite">
+            Checking…
+        </p>
+        <p id="host-error-detail" class="detail" hidden></p>
+        <div class="button-row">
+            <button id="recheck" type="button">Re-check</button>
+        </div>
+        <details>
+            <summary>Installation instructions</summary>
+            <ol>
+                <li>Download the installer for your OS from the extension's
+                    release page.</li>
+                <li>
+                    Run the installer:
+                    <code>install-linux.sh</code> /
+                    <code>install-macos.sh</code> /
+                    <code>install-windows.ps1</code>.
+                </li>
+                <li>Reload this options page and click <strong>Re-check</strong>.</li>
+            </ol>
+        </details>
+    </section>
+
+    <!-- No inline JS. CSP forbids it. -->
+    <script src="index.js"></script>
+</body>
+</html>

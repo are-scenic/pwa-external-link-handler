@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.crx
+*.zip
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
+.env

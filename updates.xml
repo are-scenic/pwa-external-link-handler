@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+    Chrome enterprise update manifest for PWA External Link Handler.
+
+    Served from `update_url` declared in manifest.json. Browsers in
+    enterprise-managed mode poll this URL and install / upgrade matching
+    extensions from `codebase`. Verified against the CRX publisher key
+    embedded in the .crx; `hash_sha256` is defence-in-depth.
+
+    TODO: replace the placeholders below before publishing.
+    - `appid`     — the deterministic extension ID derived from the project's
+                    pinned `key` (see design §7.7). Must match the value
+                    enterprise policies will reference.
+    - `codebase`  — the absolute HTTPS URL to the signed .crx artifact
+                    attached to the matching GitHub Release.
+    - `version`   — must match the `version` field in `manifest.json`.
+    - `hash_sha256` — sha256 of the published .crx; appears in the GitHub
+                    release notes.
+    - `update_url` in `manifest.json` — confirm the GitHub Pages URL before
+                    publishing. The value currently shipped is a placeholder.
+-->
+<gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">
+    <!-- TODO: replace appid before publishing -->
+    <app appid="REPLACE_WITH_PINNED_EXTENSION_ID">
+        <updatecheck
+            codebase="https://github.com/are-scenic/pwa-external-link-handler/releases/download/v0.1.0/pwa-elh-0.1.0.crx"
+            version="0.1.0"
+            hash_sha256="REPLACE_WITH_CRX_SHA256" />
+    </app>
+</gupdate>
