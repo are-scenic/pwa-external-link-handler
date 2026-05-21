@@ -3,6 +3,7 @@
     "name": "PWA External Link Handler",
     "description": "Opens external links from PWA windows in your default browser.",
     "version": "0.1.0",
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnZeHMuReJEmvnxeyHi0xfAHNFvvhpXsgczcjZGt3bZwNfN9qwyl9sRJfi+id99KgLG4YBr1xwLksARIiYQubqj62BmGcBB9wshixDm792QH87PklnqKMkWrMypZAs+E2gQZyBLWJqdrVVHtcynZl9xk+y/VWTojj7mH6vORAgsvmfte9yEnoAk6vVftbVjmX3Zfb2ET4GtHzXxH7E56/bEStPMdXxImVKv05V4v2swWv5RJkQK/K+BhmwHPlhZxrrvpPI/umA1O0t8331YS8cPH1H4gNEEhHoRj3gLZxPPL2hAiU24XGQ/3v6+5kVm4tiK7Mz9VqVJ/RGg4qev9srQIDAQAB",
     "homepage_url": "https://github.com/aaharonov/pwa-external-link-handler",
 
     "icons": {
